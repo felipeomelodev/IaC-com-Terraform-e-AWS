@@ -1,265 +1,106 @@
-# IAC com Terraform e AWS
+# 🚀 IaC com Terraform e AWS
 
-Neste repositório, vamos aprender a usar o Terraform e a AWS para criar a nossa primeira infra na nuvem.
+Provisionamento completo de uma infraestrutura na AWS utilizando **Terraform**, com foco em práticas modernas de **Infraestrutura como Código (IaC)**. Neste projeto, você aprenderá a criar uma instância EC2 segura, automatizada e pronta para hospedar um site estático.
 
-Este documento também está disponível em [formato PDF](docs/README.pdf) e [formato HTML](docs/README.html) para que você possa visualizá-lo offline.
+## 📸 Demonstração
 
-## Tabela de conteúdos
+<img src="docs/images/site.png" alt="Site no ar" width="600"/>
 
-- [Pré-requisitos](#pré-requisitos)
-- [Passo a passo](#passo-a-passo)
-- [Erros conhecidos](#erros-conhecidos)
-- [Saiba mais](#saiba-mais)
+---
 
-## Pré-requisitos
+## 🛠️ Tecnologias Utilizadas
 
-- Instalação do Terraform
-    - https://developer.hashicorp.com/terraform/downloads?product_intent=terraform
-    - **Usa Windows?** acesse esse [documento](docs/Como%20Instalar%20o%20Terraform%20no%20Windows.pdf) 
-- Instalação do AWS CLI
-    - https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
-- Criando usuário na AWS
-    - [**Acesse esse documento**](docs/Criação%20de%20usuário%20na%20AWS%20e%20chave%20de%20acesso%20para%20vincular%20ao%20AWS%20CLI%20na%20sua%20maquina.pdf)
-- Realizar login no AWS CLI
-    - `aws configure`
+- [Terraform](https://developer.hashicorp.com/terraform) ~> v1.x
+- [AWS CLI](https://aws.amazon.com/cli/)
+- AWS EC2, VPC, Security Groups, Key Pairs
+- Visual Studio Code
+- Git
 
-## Passo a passo 
+---
 
-Vamos começar a diversão! 🥳
+## 📁 Estrutura do Projeto
 
-1. Comece fazendo o clone do repositório:
-    > [!TIP]
-    > Se você preferir usar o Github é só trocar a URL do repositório para `https://github.com/avanti-dvp/iac-com-terraform-e-aws.git`
+```bash
+.
+├── provider.tf         # Provedor AWS
+├── key_pair.tf         # Geração de chaves e key pair
+├── security_group.tf   # Regras de segurança (porta 22, 80 e egress)
+├── data.tf             # AMI do Amazon Linux 2
+├── ec2.tf              # Instância EC2
+├── outputs.tf          # Saídas como IP público e URL
+├── variables.tf        # Variáveis (ex: IP público)
+├── user_data.sh        # Script de inicialização (não incluído aqui)
+└── README.md
+```
 
-    ```bash
-    git clone https://gitlab.com/avanti-dvp/iac-com-terraform-e-aws.git
-    cd iac-com-terraform-e-aws
-    ```
+---
 
-    > [!NOTE]
-    > Se você não tem o Git instalado ou não sabe usá-lo, sem problema algum, você pode simplesmente fazer o [download do repositório](https://gitlab.com/avanti-dvp/iac-com-terraform-e-aws/-/archive/main/iac-com-terraform-e-aws-main.zip) e descompactá-lo em sua pasta/diretório de trabalho ou na pasta/diretório de seu usuário
+## ⚙️ Como executar o projeto
 
-2. Vamos abrir o Visual Studio Code no diretório do repositório:
-    ```bash
-    code .
-    ```
+### 1. Pré-requisitos
 
-3. Dentro do Visual Studio Code, crie um arquivo chamado `provider.tf`, incluindo esse trecho abaixo nele:
-    ```hcl
-    terraform {
-        required_providers {
-            aws = {
-                source  = "hashicorp/aws"
-                version = "~> 5.0"
-            }
-        }
-    }
-    
-    provider "aws" {
-        region = "us-east-1"
-    }
-    ```
+- Conta na AWS
+- Instale o [Terraform](https://developer.hashicorp.com/terraform/downloads)
+- Instale o [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html)
+- Configure suas credenciais:
 
-    > [!TIP]
-    > O arquivo `provider.tf` é o arquivo que define o provedor que será usado para criar a infraestrutura na nuvem, nesse caso, a AWS.
-    > Este arquivo é uma convenção entre os desenvolvedores, ele é opcional, mas é uma boa prática ter ele.
+```bash
+aws configure
+```
 
-4. Agora vamos criar o arquivo `key_pair.tf`, incluindo esse trecho abaixo nele:
-    ```hcl
-    # Gera uma chave privada RSA de 4096 bits
-    resource "tls_private_key" "rsa_key" {
-        algorithm = "RSA"
-        rsa_bits  = 4096
-    }
+### 2. Clone o repositório
 
-    # Cria o Key Pair na AWS usando a chave pública gerada
-    resource "aws_key_pair" "ec2_key_pair" {
-        key_name   = "ec2-instance-key" # Nome do key pair na AWS
-        public_key = tls_private_key.rsa_key.public_key_openssh
-    }
+```bash
+git clone https://github.com/seu-usuario/iac-com-terraform-e-aws.git
+cd iac-com-terraform-e-aws
+```
 
-    # Salva a chave privada em um arquivo local
-    resource "local_file" "private_key_pem" {
-        content  = tls_private_key.rsa_key.private_key_pem
-        filename = "${path.module}/ec2-instance-key.pem"
+### 3. Customize a variável de IP
 
-        # Define as permissões do arquivo para que apenas o proprietário possa ler e escrever
-        file_permission = "0600"
-    }
-    ```
+Edite o arquivo `variables.tf` e insira seu IP público (você pode encontrá-lo em https://www.whatismyip.com/):
 
-    > [!TIP]
-    > O arquivo `keypair.tf` é o arquivo que define a criação de um par de chaves na AWS.
+```hcl
+default = "SEU_IP_PUBLICO/32"
+```
 
-5. Agora vamos criar o arquivo `security_group.tf`, incluindo esse trecho abaixo nele:
-    ```hcl
-    # 1. Security Group para liberar a porta 80 (HTTP) para qualquer origem
-    resource "aws_security_group" "http_sg" {
-        name        = "allow-http-sg"
-        description = "Allow HTTP inbound traffic"
+### 4. Execute os comandos Terraform
 
-        ingress {
-            from_port   = 80
-            to_port     = 80
-            protocol    = "tcp"
-            cidr_blocks = ["0.0.0.0/0"]
-        }
+```bash
+terraform init
+terraform plan
+terraform apply
+```
 
-        tags = {
-            Name = "allow-http"
-        }
-    }
+Ao final, será exibido o IP público da instância EC2. Acesse `http://<IP>` no navegador para visualizar o site.
 
-    # 2. Security Group para liberar a porta 22 (SSH) para um IP específico
-    resource "aws_security_group" "ssh_sg" {
-        name        = "allow-ssh-sg"
-        description = "Allow SSH inbound traffic from a specific IP"
+> ⚠️ Lembre-se de incluir o `http://` antes do IP no navegador, pois não há certificado SSL configurado.
 
-        ingress {
-            from_port   = 22
-            to_port     = 22
-            protocol    = "tcp"
-            cidr_blocks = [var.meu_ip_publico]
-        }
+---
 
-        tags = {
-            Name = "allow-ssh"
-        }
-    }
+## 🔐 Segurança
 
-    # 3. Security Group para liberar todo o tráfego de saída (Egress)
-    resource "aws_security_group" "egress_all_sg" {
-        name        = "allow-all-egress-sg"
-        description = "Allow all outbound traffic"
+Este projeto demonstra o uso de boas práticas como:
 
-        egress {
-            from_port   = 0
-            to_port     = 0
-            protocol    = "-1" # "-1" representa todos os protocolos
-            cidr_blocks = ["0.0.0.0/0"]
-        }
+- Chaves privadas salvas localmente com permissão `0600`
+- Acesso SSH restrito ao seu IP público
+- Separação de funções em arquivos `.tf` modulares
 
-        tags = {
-            Name = "allow-all-egress"
-        }
-    }
-    ```
+---
 
-    > [!TIP]
-    > O arquivo `security_group.tf` é o arquivo que define a criação dos security groups na AWS.
+## 🧨 Destruir a infraestrutura (cleanup)
 
-6. Agora vamos criar o arquivo `data.tf`, incluindo esse trecho abaixo nele:
-    ```hcl
-    data "aws_ami" "amazon_linux" {
-        most_recent = true
-        owners      = ["amazon"]
+Quando não estiver mais utilizando o ambiente, destrua-o para evitar custos na AWS:
 
-        filter {
-            name   = "name"
-            values = ["amzn2-ami-hvm-*-x86_64-gp2"]
-        }
-    }
-    ```
+```bash
+terraform destroy
+```
 
-    > [!TIP]
-    > O arquivo `data.tf` é o arquivo que define um datasource responsável por buscar o id da imagem (AMI) mais recente do Amazon Linux 2.
+---
 
-7. Agora vamos criar o arquivo `ec2.tf`, incluindo esse trecho abaixo nele:
-    ```hcl
-    # Cria a instância EC2
-    resource "aws_instance" "web_server" {
-        ami           = data.aws_ami.amazon_linux.id
-        instance_type = "t2.micro"
-        user_data     = base64encode(file("user_data.sh"))
+## 📚 Referências
 
-        # Define o key pair para a instância
-        key_name      = aws_key_pair.ec2_key_pair.key_name
+- [Documentação oficial do Terraform](https://developer.hashicorp.com/terraform)
+- [Provider AWS no Terraform Registry](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
+- [Documentação AWS](https://docs.aws.amazon.com/pt_br/)
 
-        # Associa os 3 Security Groups à instância
-        vpc_security_group_ids = [
-            aws_security_group.http_sg.id,
-            aws_security_group.ssh_sg.id,
-            aws_security_group.egress_all_sg.id
-        ]
-
-        tags = {
-            Name = "WebServer-DVP"
-        }
-    }
-    ```
-
-    > [!TIP]
-    > O arquivo `ec2.tf` é o arquivo que define a criação da instância EC2 na AWS.
-
-8. Agora vamos criar o arquivo `outputs.tf`, incluindo esse trecho abaixo nele:
-    ```hcl
-    # Bloco para exibir o IP público da instância após a criação
-    output "instance_public_ip" {
-      description = "IP público da instância EC2"
-      value       = aws_instance.web_server.public_ip
-    }
-
-    output "website_url" {
-        description = "URL do site provisionado."
-        value       = "http://${aws_instance.web_server.public_ip}"
-    }
-    ```
-
-    > [!TIP]
-    > O arquivo `outputs.tf` é o arquivo que define as saídas que serão exibidas após a criação da infraestrutura, nesse caso, o IP público da instância EC2.
-
-9. Agora vamos criar o arquivo `variables.tf`, incluindo esse trecho abaixo nele:
-    ```hcl
-    variable "meu_ip_publico" {
-        type        = string
-        description = "Endereço IP público para o Security Group SSH"
-        # IMPORTANTE: Substitua pelo seu endereço IP público
-        # Para saber o seu IP público, acesse https://www.whatismyip.com/
-        default     = "203.0.113.25/32"
-    }
-    ```
-
-    > [!TIP]
-    > O arquivo `variables.tf` é o arquivo que define as variáveis que serão usadas na infraestrutura, nesse caso, o IP público para o Security Group SSH.
-
-10. Boa! terminamos de criar todos os arquivos necessários para a criação da infraestrutura na nuvem.
-
-11. Agora vamos iniciar o fluxo de trabalho do Terraform para criar a infraestrutura na nuvem:
-    ```bash
-    terraform init
-    terraform plan
-    terraform apply
-    ```
-
-    > [!NOTE]
-    > O comando `terraform init` inicializa o Terraform e baixa os providers necessários para a criação da infraestrutura na nuvem.
-    > O comando `terraform plan` cria um plano de execução que mostra as alterações que serão feitas na infraestrutura na nuvem.
-    > O comando `terraform apply` aplica as configurações definidas nos arquivos .tf e cria a infraestrutura na nuvem.
-
-12. Se tudo rodar com sucesso, você verá o IP público da instância EC2 e a URL do site provisionado, basta acessá-lo através dessa URL no seu navegador para ver o site está no ar.
-
-> [!WARNING]
-> A maioria dos navegadores modernos força o redirecionamento da página para HTTPS
-> Como não subimos o site em HTTPS, a conexão não irá acontecer
-> Portanto, para ver o site funcionando, você precisa adicionar o http:// no começo da URL antes do IP na barra de endereço do seu navegador
-
-E ele deverá aparecer dessa forma:
-
-![Site no Ar](docs/images/site.png)
-
-13. Para destruir a infraestrutura na nuvem, execute o comando abaixo:
-    ```bash
-    terraform destroy
-    ```
-
-    > [!NOTE]
-    > O comando `terraform destroy` destrói a infraestrutura na nuvem que foi criada pelo Terraform.
-    > **RECOMENDADO:** Sempre que você criar uma infraestrutura na nuvem, certifique-se de destruí-la quando não estiver mais usando.
-
-## Saiba mais
-
-- [Documentação do Terraform](https://developer.hashicorp.com/terraform)
-- [Documentação do Provider AWS do Terraform](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
-- [Lista de Providers do Terraform](https://registry.terraform.io/browse/providers)
-- [Documentação da AWS](https://docs.aws.amazon.com/pt_br/)
-
+---
