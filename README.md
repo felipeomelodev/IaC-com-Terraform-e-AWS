@@ -1,7 +1,5 @@
 # 🚀 IaC com Terraform e AWS
 
-# Projeto IaC com Terraform e AWS
-
 ## 📌 Conteúdo
 - [Sobre](#sobre)
 - [Pré‑requisitos](#pré‑requisitos)
